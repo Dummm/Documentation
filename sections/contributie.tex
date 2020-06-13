@@ -1,16 +1,231 @@
-\chapter{Contribuția propriu-zisă a candidatului}
+% \chapter{Contribuția propriu-zisă a candidatului}
+\chapter{Arhitectura aplicației}
+    \paragraph{} Funcțiile de bază ale acestei aplicații sunt gestionarea containerelor și a imaginilor folosite pentru crearea acestora, și execuția proceselor în aceste medii izolate.
+    \paragraph{} Toate fișierele aplicației sunt stocate în directorul \textit{.minato} aflat în directorul \textit{\$HOME} al utilizatorului care rulează aplcația. Acest director conține containerele (\textit{.minato/containers}), imaginile (\textit{.minato/images}) si alte fișiere auxiliare.
+    \begin{figure}[h!]
+        \centering
+        \begin{forest}
+            for tree={
+                font=\ttfamily,
+                grow'=0,
+                child anchor=west,
+                parent anchor=south,
+                anchor=west,
+                calign=first,
+                inner xsep=7pt,
+                edge path={
+                    \noexpand\path [draw, \forestoption{edge}]
+                    (!u.south west) +(7.5pt,0) |- (.child anchor) pic {folder} \forestoption{edge label};
+                },
+                % style for your file node
+                file/.style={
+                    edge path={
+                        \noexpand\path [draw, \forestoption{edge}]
+                        (!u.south west) +(7.5pt,0) |- (.child anchor) \forestoption{edge label};
+                    },
+                    inner xsep=2pt,
+                    font=\small\ttfamily
+                },
+                before typesetting nodes={
+                    if n=1
+                    {insert before={[,phantom]}}
+                    {}
+                },
+                fit=band,
+                before computing xy={l=15pt},
+            }
+            [ /home/root
+                [ .minato
+                    [ containers ]
+                    [ images ]
+                    [ ..., file ]
+                ]
+            ]
+        \end{forest}
+        \caption{Directorul principal al aplicației}
+        \label{fig:dirprinc}
+    \end{figure}
+    \paragraph{} Aplicația este compusă din trei componente principale: Managerul de containere, Managerul de imagini, Daemon/client.
 
-\section{Structurată în funcție de tipul lucrării, fiind compusă dintr-un număr arbitrar de capitole (vezi formatul lucrării în funcţie de tip).}
-    \subsection{Descriu în detaliu fundamentarea teoretică și dezvoltarea aplicativă (dacă e cazul) a temei abordate}
-    \subsection{Conţin puncte de vedere personale, interpretări ale teoriilor și conceptelor abordate în lucrare}
-    \subsection{Trec în revistă abordări existente ale problemei cu evidențierea avantajelor şi dezavantajelor}
-    \subsection{Descompun problema propusă de tema lucrării în subprobleme specifice şi prezentarea modului de rezolvare, analize critice ale fenomenelor şi proceselor studiate, comparații cu rezultate obţinute anterior (unde e cazul), proiectarea aplicaţiei, detalii de implementare, rezultate experimentale, exemple de test sau rezultate sub forma unor studii de caz, modul de utilizare a programului etc.}
-\section{Arhitectura aplicatiei}
-    \subsection{pachete de clase pentru partea de user/admin}
-    \subsection{diagrama entitate relatie a bazei de date}
-    \subsection{alte componente incapsulate (maps, API-uri etc)}
-\section{Functionalitatea aplicatiei}
-    \subsection{un ghid al aplicatiei cu capturi de imagine si secvente de cod reprezentative}
-\section{Testarea aplicatiei}
-    \subsection{teste functionale}
-    \subsection{identificarea unor puncte slabe care vor fi rezolvate ulterior}
+    \pagebreak
+    \section{Managerul de containere}
+        \paragraph{} Scopul managerului de containere este de a crea o interfață între utilizator și aplicație. Acesta poate efectua următoarele operații:
+        \begin{table}[h!]
+            \centering
+            \begin{tabular}{ |c|l| }
+                \hline
+                \textbf{Operație} & \textbf{Descrierea operației}  \\
+                \hline
+                \textit{create} & Crearea unui container  \\
+                \hline
+                \textit{run}    & Rularea unui container  \\
+                \hline
+                \textit{open}   & Deschiderea unui container  \\
+                \hline
+                \textit{stop}   & Oprirea unui container  \\
+                \hline
+                \textit{list}   & Afișarea tuturor containerelor create  \\
+                \hline
+                \textit{delete} & Ștergerea unui container  \\
+                \hline
+            \end{tabular}
+            \caption{Operațiile efectuate de către managerul de containere}
+            \label{table:cmop}
+        \end{table}
+
+        \subsection{Crearea unui container (\textit{create})}
+            \paragraph{} Această operație constă în crearea directorului în care se vor stoca fișierele containerului și se va monta sistemul de fișiere. Inițial acesta va conține directoarele necesare pentru operația de montare, \textit{upper}, \textit{lower}, \textit{work} și \textit{merged}, care vor fi goale, cu exceptia directorului \textit{lower}, care va fi o legătură simbolică către directorul în care sunt stocate straturile imaginii.
+            \paragraph{} De asemenea, în director containerului va fi creat fișierul \textit{config.json} în care se află toate configurările necesare pentru rularea containerului.
+            \begin{figure}[h!]
+                \begin{subfigure}{.5\textwidth}
+                    \centering
+                    \begin{forest}
+                        for tree={
+                            font=\ttfamily,
+                            grow'=0,
+                            child anchor=west,
+                            parent anchor=south,
+                            anchor=west,
+                            calign=first,
+                            inner xsep=7pt,
+                            edge path={
+                                \noexpand\path [draw, \forestoption{edge}]
+                                (!u.south west) +(7.5pt,0) |- (.child anchor) pic {folder} \forestoption{edge label};
+                            },
+                            % style for your file node
+                            file/.style={
+                                edge path={
+                                    \noexpand\path [draw, \forestoption{edge}]
+                                    (!u.south west) +(7.5pt,0) |- (.child anchor) \forestoption{edge label};
+                                },
+                                inner xsep=2pt,
+                                font=\small\ttfamily
+                            },
+                            before typesetting nodes={
+                                if n=1
+                                {insert before={[,phantom]}}
+                                {}
+                            },
+                            fit=band,
+                            before computing xy={l=15pt},
+                        }
+                        [ /home/root
+                            [ .minato
+                                [ containers
+                                    [ cont
+                                        [ lower -> /root/.minato/images/...
+                                            [ 6154df8ff9882934dc5... ]
+                                            [ a3ed95caeb02ffe68cd... ]
+                                            [ ..., file ]
+                                        ]
+                                        [ merged ]
+                                        [ upper ]
+                                        [ work ]
+                                        [ config.json, file]
+                                    ]
+                                ]
+                                [ ..., file ]
+                            ]
+                        ]
+                    \end{forest}
+                    \caption{Directorul unui container}
+                    \label{fig:dircont}
+                \end{subfigure}
+                \begin{subfigure}{.5\textwidth}
+                    \centering
+                    \begin{forest}
+                        for tree={
+                            font=\ttfamily,
+                            grow'=0,
+                            child anchor=west,
+                            parent anchor=south,
+                            anchor=west,
+                            calign=first,
+                            inner xsep=7pt,
+                            edge path={
+                                \noexpand\path [draw, \forestoption{edge}]
+                                (!u.south west) +(7.5pt,0) |- (.child anchor) pic {folder} \forestoption{edge label};
+                            },
+                            % style for your file node
+                            file/.style={
+                                edge path={
+                                    \noexpand\path [draw, \forestoption{edge}]
+                                    (!u.south west) +(7.5pt,0) |- (.child anchor) \forestoption{edge label};
+                                },
+                                inner xsep=2pt,
+                                font=\small\ttfamily
+                            },
+                            before typesetting nodes={
+                                if n=1
+                                {insert before={[,phantom]}}
+                                {}
+                            },
+                            fit=band,
+                            before computing xy={l=15pt},
+                        }
+                        [ /home/root
+                            [ .minato
+                                [ containers
+                                    [ cont
+                                        [ merged
+                                            [ bin ]
+                                            [ boot ]
+                                            [ dev ]
+                                            [ etc ]
+                                            [ home ]
+                                            [ ..., file ]
+                                        ]
+                                        [ ..., file ]
+                                        [ pid, file ]
+                                    ]
+                                ]
+                                [ ..., file ]
+                            ]
+                        ]
+                    \end{forest}
+                    \caption{Directorul unui container în timpul rulării}
+                    \label{fig:controot}
+                \end{subfigure}
+            \end{figure}
+
+        \subsection{Rularea unui container (\textit{run})}
+            \paragraph{} Operația de rulare reprezintă crearea propriu-zisă a spațiului izolat în sistemul de operare. Pentru realizarea acestei operații, se efectuează mai mulți pași.
+            \paragraph{Efectuarea primului \textit{fork},} care are rolul de a separa procesul containerului de procesul \textit{daemonului} atunci cănd programul trebuie sa ruleze pe fundal. De asemenea, este creat fișierul \textit{pid} care este folosit pentru a verifica daca container-ul rulează deja și, în cazul afirmativ, care este PID-ul acestuia. Crearea fișierului este efectuată de către părintele din \textit{fork}, resul pașilor de către copil.
+            \paragraph{Montarea rădacinii containerului,} folosind sistemul de fișiere OverlayFS. În urma acesteia, în directorul \textit{merged} se va găsi structura de directoare specifică \textit{kernelului} Linux.
+            \paragraph{Apelul funcției \textit{unshare}} cu \textit{flag}-urile specifice fiecarui \textit{namespace}. În urma acestuia, toate procesele copil ale procesului curent vor fi create în \textit{namespace}-uri separate.
+            \paragraph{Setarea sistemului de fișiere a mașinii gazdă ca privat.} Acest pas are rolul de a izola toate evenimentele din sistemul de operare gazdă care au legătură cu operația de montare.
+            \paragraph{Legarea executabilului folosit ca proces inițial.} Acest pas constă în efectuarea unui \textit{bind mount} între fișierul \textit{tini}, aflat în directorul \textit{.minato}, și un fișier nou creat în sistemul de fișiere al containerului. \textit{tini} este un program open-source care are aceleași funcționalitați ca procesul \textit{init} găsit în sistemele de operare Unix.
+
+        \subsection{Deschiderea unui container (\textit{open})}
+
+
+        \subsection{Oprirea unui container (\textit{stop})}
+
+
+        \subsection{Afișarea tuturor containerelor create (\textit{list})}
+
+
+        \subsection{Ștergerea unui container (\textit{delete})}
+
+
+
+    \section{Managerul de imagini}
+
+
+    \section{Daemon/client}
+
+
+% \section{Arhitectura aplicatiei}
+%     \subsection{pachete de clase pentru partea de user/admin}
+%     \subsection{diagrama entitate relatie a bazei de date}
+%     \subsection{alte componente incapsulate (maps, API-uri etc)}
+% \section{Structurată în funcție de tipul lucrării, fiind compusă dintr-un număr arbitrar de capitole (vezi formatul lucrării în funcţie de tip).}
+%     \subsection{Descriu în detaliu fundamentarea teoretică și dezvoltarea aplicativă (dacă e cazul) a temei abordate}
+%     \subsection{Conţin puncte de vedere personale, interpretări ale teoriilor și conceptelor abordate în lucrare}
+%     \subsection{Trec în revistă abordări existente ale problemei cu evidențierea avantajelor şi dezavantajelor}
+%     \subsection{Descompun problema propusă de tema lucrării în subprobleme specifice şi prezentarea modului de rezolvare, analize critice ale fenomenelor şi proceselor studiate, comparații cu rezultate obţinute anterior (unde e cazul), proiectarea aplicaţiei, detalii de implementare, rezultate experimentale, exemple de test sau rezultate sub forma unor studii de caz, modul de utilizare a programului etc.}
+% \section{Functionalitatea aplicatiei}
+%     \subsection{un ghid al aplicatiei cu capturi de imagine si secvente de cod reprezentative}
+% \section{Testarea aplicatiei}
+%     \subsection{teste functionale}
+%     \subsection{identificarea unor puncte slabe care vor fi rezolvate ulterior}

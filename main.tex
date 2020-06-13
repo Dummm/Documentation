@@ -56,6 +56,24 @@
 % Roman letters for chapters
 \renewcommand{\thechapter}{\Roman{chapter}}
 
+% Table spacing
+\renewcommand{\arraystretch}{1.33} % Default value: 1
+
+% Forest for directories
+\usepackage{forest}
+\definecolor{folderbg}{RGB}{0,0,0}
+\definecolor{folderborder}{RGB}{255,255,255}
+\def\Size{4pt}
+\tikzset{
+	folder/.pic={
+	\filldraw[draw=folderborder,top color=folderbg!65,bottom color=folderbg]
+		(-1.05*\Size,0.2\Size+5pt) rectangle ++(.75*\Size,-0.2\Size-5pt);
+	\filldraw[draw=folderborder,top color=folderbg!65,bottom color=folderbg]
+		(-1.15*\Size,-\Size) rectangle (1.15*\Size,\Size);
+	}
+}
+
+
 \makeindex
 
 \begin{document}
@@ -69,7 +87,7 @@
 
 \subfile{sections/abstract}
 \subfile{sections/introduction}
-\subfile{sections/preliminarii}
+\subfile{sections/tehnologii}
 \subfile{sections/contributie}
 \subfile{sections/concluzii}
 
