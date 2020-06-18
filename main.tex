@@ -1,8 +1,6 @@
 \documentclass[12pt,a4paper,romanian]{report}
 % \documentclass[12pt]{book}
 % \usepackage{times}
-\usepackage{setspace}
-\doublespacing
 
 % Packages that we are going to use
 \usepackage[utf8]{inputenc}
@@ -34,12 +32,22 @@
 }
 
 \usepackage{url}
+\usepackage{hyperref}
+\def\subsectionautorefname{secțiunea}
+\usepackage{listings, listings-rust}
+\lstset{
+  breaklines=true,
+  postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space},
+}
 
 % Line spacing
 \renewcommand{\baselinestretch}{1.35}
 \renewcommand\appendixtocname{Anexe}
 \renewcommand\appendixname{Anexe}
 \renewcommand\appendixpagename{Anexe}
+
+\usepackage{setspace}
+\doublespacing
 
 \graphicspath{{images/}{../images/}}
 
@@ -81,14 +89,19 @@
 \subfile{sections/title}
 \restoregeometry
 
+\addtocontents{toc}{\protect\thispagestyle{empty}}
 \tableofcontents
-
+\thispagestyle{empty}
 \newpage
 
+% \pagestyle{empty}
 \subfile{sections/abstract}
+% \pagenumbering{arabic}
+\setcounter{page}{1}
 \subfile{sections/introduction}
 \subfile{sections/tehnologii}
 \subfile{sections/contributie}
+\subfile{sections/utilizare}
 \subfile{sections/concluzii}
 
 \newpage

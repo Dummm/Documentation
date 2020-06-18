@@ -1,7 +1,7 @@
 % \chapter{Contribuția propriu-zisă a candidatului}
 \chapter{Arhitectura aplicației}
     \paragraph{} Funcțiile de bază ale acestei aplicații sunt gestionarea containerelor și a imaginilor folosite pentru crearea acestora, și execuția proceselor în aceste medii izolate.
-    \paragraph{} Toate fișierele aplicației sunt stocate în directorul \textit{.minato} aflat în directorul \textit{\$HOME} al utilizatorului care rulează aplcația. Acest director conține containerele (\textit{.minato/containers}), imaginile (\textit{.minato/images}) si alte fișiere auxiliare.
+    \paragraph{} Toate fișierele aplicației sunt stocate în directorul \textit{minato} aflat în directorul \textit{/var/lib/} al utilizatorului care rulează aplcația. Acest director conține containerele (\textit{minato/containers}), imaginile (\textit{minato/images}) si alte fișiere auxiliare.
     \begin{figure}[h!]
         \centering
         \begin{forest}
@@ -34,7 +34,7 @@
                 fit=band,
                 before computing xy={l=15pt},
             }
-            [ /home/root
+            [ /var/lib
                 [ .minato
                     [ containers ]
                     [ images ]
@@ -74,8 +74,23 @@
         \end{table}
 
         \subsection{Crearea unui container (\textit{create})}
-            \paragraph{} Această operație constă în crearea directorului în care se vor stoca fișierele containerului și se va monta sistemul de fișiere. Inițial acesta va conține directoarele necesare pentru operația de montare, \textit{upper}, \textit{lower}, \textit{work} și \textit{merged}, care vor fi goale, cu exceptia directorului \textit{lower}, care va fi o legătură simbolică către directorul în care sunt stocate straturile imaginii.
-            \paragraph{} De asemenea, în director containerului va fi creat fișierul \textit{config.json} în care se află toate configurările necesare pentru rularea containerului.
+            \paragraph{} Această operație constă în crearea directorului în care se vor stoca fișierele containerului și se va monta sistemul de fișiere. Inițial acesta va conține directoarele necesare pentru operația de montare, \textit{upper}, \textit{lower}, \textit{work} și \textit{merged}, care vor fi goale, cu exceptia directorului \textit{lower}, care va fi o legătură simbolică către directorul în care sunt stocate straturile imaginii care urmează să fiee utilizate de către container.
+            \paragraph{} De asemenea, în directorul containerului va fi creat fișierul \textit{config.json} în care se află toate configurările care trebuie aplicate asupra containerului. Printre acestea se regăsesc: maparea unu la unu dintre userul din sistemul de operare și userul din container, \textit{namespaceurile} în care trebuie izolat containerul, hostname-ul containerului, etc.
+                \begin{lstlisting}[language=Rust, style=boxed, caption={Crearea unui container},captionpos=b]
+pub fn create(&self) -> Result<(), Box<dyn std::error::Error>> {
+    info!("creating container");
+
+    if Path::new(&self.path).exists() {
+        info!("container exists. skipping creation...");
+        return Ok(())
+    }
+    self.create_directory_structure()?;
+    self.generate_config_json()?;
+
+    info!("created container.");
+    Ok(())
+}               \end{lstlisting}
+                \label{fig:cod_ccreate}
             \begin{figure}[h!]
                 \begin{subfigure}{.5\textwidth}
                     \centering
@@ -109,7 +124,7 @@
                             fit=band,
                             before computing xy={l=15pt},
                         }
-                        [ /home/root
+                        [ /var/lib
                             [ .minato
                                 [ containers
                                     [ cont
@@ -163,7 +178,7 @@
                             fit=band,
                             before computing xy={l=15pt},
                         }
-                        [ /home/root
+                        [ /var/lib
                             [ .minato
                                 [ containers
                                     [ cont
@@ -188,31 +203,157 @@
                 \end{subfigure}
             \end{figure}
 
-        \subsection{Rularea unui container (\textit{run})}
+        \subsection{Rularea unui container (\textit{run})} \label{section:run}
+            \begin{lstlisting}[language=Rust, style=boxed, caption={Rularea unui container},captionpos=b]
+fn run(&self, daemon: bool, volume: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
+    self.mount_container_filesystem()?;
+    self.prepare_container_mountpoint()?;
+    self.mount_volume(volume)?;
+    self.prepare_container_directories()?;
+    self.prepare_container_networking()?;
+    self.mount_container_directories()?;
+    self.prepare_container_id_maps()?;
+    self.pivot_container_root()?;
+    self.execute_inner_fork(daemon)?;
+
+    Ok(())
+}           \end{lstlisting}
+            \label{fig:cod_crun}
             \paragraph{} Operația de rulare reprezintă crearea propriu-zisă a spațiului izolat în sistemul de operare. Pentru realizarea acestei operații, se efectuează mai mulți pași.
-            \paragraph{Efectuarea primului \textit{fork},} care are rolul de a separa procesul containerului de procesul \textit{daemonului} atunci cănd programul trebuie sa ruleze pe fundal. De asemenea, este creat fișierul \textit{pid} care este folosit pentru a verifica daca container-ul rulează deja și, în cazul afirmativ, care este PID-ul acestuia. Crearea fișierului este efectuată de către părintele din \textit{fork}, resul pașilor de către copil.
+            \paragraph{Efectuarea primului \textit{fork},} care are rolul de a separa procesul containerului de procesul \textit{daemonului} atunci cănd programul trebuie sa ruleze pe fundal și de a îl păstra pe acesta în \textit{namespaceul} inițial al sistemului de operare gazdă. De asemenea, este creat fișierul \textit{pid} care este folosit pentru a verifica daca container-ul rulează deja și, în cazul afirmativ, care este PID-ul acestuia. Crearea fișierului este efectuată de către părintele din \textit{fork}, resul pașilor de către copil.
+                \begin{figure}[h!]
+                    \centering
+                    \includegraphics[width=.75\textwidth]{fork}
+                    \caption{Crearea procesului în noul namespace}
+                    \label{fig:fork}
+                \end{figure}
             \paragraph{Montarea rădacinii containerului,} folosind sistemul de fișiere OverlayFS. În urma acesteia, în directorul \textit{merged} se va găsi structura de directoare specifică \textit{kernelului} Linux.
             \paragraph{Apelul funcției \textit{unshare}} cu \textit{flag}-urile specifice fiecarui \textit{namespace}. În urma acestuia, toate procesele copil ale procesului curent vor fi create în \textit{namespace}-uri separate.
             \paragraph{Setarea sistemului de fișiere a mașinii gazdă ca privat.} Acest pas are rolul de a izola toate evenimentele din sistemul de operare gazdă care au legătură cu operația de montare.
             \paragraph{Legarea executabilului folosit ca proces inițial.} Acest pas constă în efectuarea unui \textit{bind mount} între fișierul \textit{tini}, aflat în directorul \textit{.minato}, și un fișier nou creat în sistemul de fișiere al containerului. \textit{tini} este un program open-source care are aceleași funcționalitați ca procesul \textit{init} găsit în sistemele de operare Unix.
+            \paragraph{Crearea directoarelor} \textit{dev}, \textit{sys}, \textit{proc}, \textit{old\_proc} și \textit{put\_old}. Directorul \textit{old\_proc} este folosit pentru montarea pseudo-sistemului de fișiere \textit{proc}, iar directorul \textit{put\_old} este folosit în operația de \textit{pivot\_root}, similară cu \textit{chroot}, prin care se schimbă rădacina procesului curent.
+            \paragraph{Crearea legăturii de rețea} dintre container și sistemul de operare gazdă folosind un dispozitiv virtual de \textit{ethernet}(\textit{veth}).
+
+            \begin{figure}[h!]
+                \begin{lstlisting}[language=bash, style=boxed]
+ip link add example-br0 type bridge
+ip link set dev example-br0 up
+ip link add example-veth0 type veth peer name example-veth1
+ip addr add 192.168.1.10/24 dev example-veth0
+ip link set example-veth0 up
+ip link set dev example-veth1 master example-br0
+ln /proc/67539/ns/net /var/run/netns/example-ns
+ip link set example-veth1 netns example-ns
+ip netns exec example-ns ip link set lo up
+ip netns exec example-ns ip link set example-veth1 up
+ip netns exec example-ns ip addr add 192.168.1.11/24 dev example-veth1
+ip netns exec example-ns ip route add default via 192.168.1.11/24 \end{lstlisting}
+                \caption{Comenzile utilizate pentru crearea legăturii de rețea}
+                \label{fig:cod_net}
+            \end{figure}
+            \paragraph{Crearea ierarhiei cgroup.} Pentru efectuarea acestui pas este nevoie doar de crearea și montarea directoarelor principale ( \textit{freezer}, \textit{memory}, \textit{blkio}, etc.). Odata montate, acestea sunt populate automat de către \textit{kernel}.
+            \paragraph{Schimbarea id-urilor utilizatorului} pentru noul \textit{user namespace}, folosind fișierele \textit{/proc/self/uid\_map} și \textit{/proc/self/gid\_map}. Acestea permit crearea unei legături unu la unu între id-urile din sistemul de operare gazdă si id-urile din container.
+            \paragraph{Schimbarea rădacinii sistemului de fișiere} din container folosind operația \textit{pivot\_root}.
+            \paragraph{Efectuarea \textit{fork}-ului final} pentru aplicarea efectelor operației \textit{unshare}. Acesta va crea un nou proces copil, în care se va executa primul proces al containerului folosind comanda \textit{execve}.
+            \paragraph{Curățarea spațiului de lucru} urmată de sfârșirea procesului început de către container. Aceasta constă în ștergerea dispozitivelor create pentru stabilirea legăturii de rețea dintre container și sistem de operare, și în demontarea sistemului de fișiere \textit{overlay}.
+
+            \begin{figure}[h!]
+                \centering
+                \includegraphics[width=1\textwidth]{cont_run}
+                \caption{Rularea unui container cu comanda /bin/sh}
+                \label{fig:run}
+            \end{figure}
 
         \subsection{Deschiderea unui container (\textit{open})}
+            \paragraph{} Operația de deschidere a unui container se realizează folosind apelul de system \textit{setns} împreuna cu \textit{flag}-urile specifice fiecarui \textit{namespace}, urmat de comanda \textit{execve} cu interpretorul \textit{sh}.
+            \begin{figure}[h!]
+                \begin{lstlisting}[language=Rust, style=boxed, caption={Crearea unui container},captionpos=b]
+pub fn open(&self, container_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    info!("opening container...");
 
+    let container_pid = match utils::get_container_pid_with_str(container_name).unwrap() {
+        None => {
+            info!("container isn't running or doesn't exist. exiting...");
+            return Ok(());
+        },
+        Some(pid) => pid
+    };
+    info!("container pid: {}", container_pid);
+    let mut namespaces = HashMap::new();
+    namespaces.insert(CloneFlags::CLONE_NEWIPC, "ipc");
+    namespaces.insert(CloneFlags::CLONE_NEWUTS, "uts");
+    namespaces.insert(CloneFlags::CLONE_NEWNET, "net");
+    namespaces.insert(CloneFlags::CLONE_NEWPID, "pid");
+    namespaces.insert(CloneFlags::CLONE_NEWNS, "mnt");
+    namespaces.insert(CloneFlags::CLONE_NEWCGROUP, "cgroup");
+    namespaces.insert(CloneFlags::CLONE_NEWUSER, "user");
+    let pid_path = format!("/proc/{}/ns", container_pid);
+    info!("setting namespaces...");
+    for namespace in namespaces {
+        let ns_path = format!("{}/{}", pid_path, namespace.1);
+        self.set_namespace(ns_path.as_str(), namespace.0)?;
+    }
+    let result = match fork() {
+        Ok(ForkResult::Parent { child, .. }) => {
+            waitpid(child, None)?;
+            Ok(())
+        }
+        Ok(ForkResult::Child) => {
+            self.do_exec("/bin/sh")
+        }
+        Err(e) => {
+            info!("fork failed: {}", e);
+            Ok(())
+        }
+    };
+    info!("opened container.");
+    result
+}                \end{lstlisting}
+                \caption{Crearea unui container}
+                \label{fig:cod_ccreate}
+            \end{figure}
 
         \subsection{Oprirea unui container (\textit{stop})}
-
+            \paragraph{} Operația de oprire a unui container se realizează folosind apelul de system \textit{kill} împreuna cu \textit{flag}-ul \textit{SIGTERM} și id-ul PID al container-ului.
 
         \subsection{Afișarea tuturor containerelor create (\textit{list})}
-
+            \paragraph{} Operația de afișare a containerelor se realizează prin citirea tuturor directoarelor aflate în directoarele \textit{containers} și \textit{images}. Pentru fiecare container găsit se afișeaza numele acestuia, imaginea folosită pentru crearea lui, locația unde este stocat și PID-ul lui dacă acesta rulează.
 
         \subsection{Ștergerea unui container (\textit{delete})}
-
-
+        \paragraph{} Operația de ștergere a unui container se realizează prin ștergerea directorului în care acesta este stocat.
 
     \section{Managerul de imagini}
+        \paragraph{} Asemănător cu managerul de containere, scopul managerului de imagini este de a crea o interfață între utilizator și aplicație. Acesta poate efectua următoarele operații:
+        \begin{table}[h!]
+            \centering
+            \begin{tabular}{ |c|l| }
+                \hline
+                \textbf{Operație} & \textbf{Descrierea operației}  \\
+                \hline
+                \textit{pull}   & Downloadarea și stocarea unei imagini  \\
+                \hline
+                \textit{list}   & Afișarea tuturor imaginilor downloadate  \\
+                \hline
+                \textit{delete} & Ștergerea unei imagini  \\
+                \hline
+            \end{tabular}
+            \caption{Operațiile efectuate de către managerul de containere}
+            \label{table:cmop}
+        \end{table}
 
+        \subsection{Downloadarea și stocarea unei imagini (\textit{pull})}
+            \paragraph{} Downloadarea imaginilor se face din \textit{repository}-ul Docker, Docker Hub, prin API-ul pus la dispoziție de către aceștia. Acest proces constă în autentificarea cu API-ul și downloadarea fișierului \textit{json} asociat imaginii. Din acest fișier sunt extrase date pentru descărcarea straturilor imaginii, care apoi sunt descărcate și dezarhivate în directorul imaginii.
+
+        \subsection{Afișarea tuturor imaginilor downloadate (\textit{list})}
+            \paragraph{} Operația de afișare a imaginilor se realizează prin citirea tuturor directoarelor aflate în directorul \textit{images}. Pentru fiecare imagine găsită se afișeaza numele acesteia locația unde este stocată.
+
+        \subsection{Ștergerea unei imagini (\textit{delete})}
+        \paragraph{} Operația de ștergere a unei imagini se realizează prin ștergerea directorului în care aceasta este stocată.
 
     \section{Daemon/client}
+        \paragraph{} Componenta daemon/client permite rularea unui proces pe fundal care se ocupă cu gestionarea containerelor și a imaginilor, și comunicarea cu acesta.
+        \paragraph{} Beneficiul principal al acestei componente este faptul că aceasta pune la dispoziție accesul la operațiile containerului și utilizatorilor neprivilegiați.
+        \paragraph{} Comunicarea dintre client și daemon are loc prin \textit{socketuri} Unix, daemonul așteptănd constant să primească instrucțiuni de la clienți pe care apoi să le execute. Clienții pot trimite operații specifice programului, printre care și cea de oprire a daemon-ului.
 
 
 % \section{Arhitectura aplicatiei}

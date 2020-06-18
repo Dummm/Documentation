@@ -1,64 +1,21 @@
-# Boilerplate LaTeX
+# listings-rust
+A Rust language and style specification for the LaTeX-package listings
 
-Se oferă un format pentru lucrarea de licență sau disertație, ce conține o serie de setări prestabilite, pentru a putea începe scrierea lucrării fără alte bătăi de cap.
+## Usage
+* place the `listings-rust.sty` where `latex` can find it
+* import `listings` and `listings-rust` in your LaTeX document with `\usepackage{listings, listings-rust}`
+* select the language `Rust` in the `lstlistings` environment, e.g.
+  ```latex
+  \begin{lstlisting}[language=Rust]
+  // your source code
+  \end{lstlisting}
+  ```
+* optional: select one of the styles `colouredRust` or `boxed`, e.g.
+  ```latex
+  \begin{lstlisting}[language=Rust, style=boxed]
+  // your source code
+  \end{lstlisting}
+  ```
 
-## Instalare
-
-`git clone https://github.com/vlad-doru/latex-romanian-thesis.git`
-
-Deschideți apoi fișierul `main.tex` cu editorul LaTeX preferat. Proiectul recomandă folosirea TeXStudio.
-
-## Ce conține?
-
-
-### Prima pagină
-
-<p>
-  <img src="https://raw.githubusercontent.com/vlad-doru/latex-romanian-thesis/master/examples/first_page.png" width="400">
-</p>
-
-### Cuprins
-
-<p>
-  <img src="https://raw.githubusercontent.com/vlad-doru/latex-romanian-thesis/master/examples/toc.png" width="400">
-</p>
-
-### Exemplu conținut
-
-<p>
-  <img src="https://raw.githubusercontent.com/vlad-doru/latex-romanian-thesis/master/examples/example.png" width="400">
-</p>
-
-### Bibliografie
-
-<p>
-  <img src="https://raw.githubusercontent.com/vlad-doru/latex-romanian-thesis/master/examples/bibliography.png" width="400">
-</p>
-
-### Glosar
-
-<p>
-  <img src="https://raw.githubusercontent.com/vlad-doru/latex-romanian-thesis/master/examples/index.png" width="400">
-</p>
-
-### Anexă
-
-<p>
-  <img src="https://raw.githubusercontent.com/vlad-doru/latex-romanian-thesis/master/examples/appendix.png" width="400">
-</p>
-
-## Contribuții
-
-1. Fork!
-2. Creează branch: `git checkout -b my-new-feature`
-3. Commit: `git commit -am 'Add some feature'`
-4. Push: `git push origin my-new-feature`
-5. Submit pull request :D
-
-## Credits
-
-Vlad-Doru Ion
-
-## Licență
-
-Apache License 2.0 
+## Documentation
+Currently there is only the style-file itself and the example document `listings-style.tex` for documentation.
