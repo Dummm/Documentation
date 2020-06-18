@@ -201,9 +201,12 @@ pub fn create(&self) -> Result<(), Box<dyn std::error::Error>> {
                     \caption{Directorul unui container în timpul rulării}
                     \label{fig:controot}
                 \end{subfigure}
+                \caption{Directorul unui container}
+                \label{fig:dircontfig}
             \end{figure}
 
         \subsection{Rularea unui container (\textit{run})} \label{section:run}
+            \paragraph{} Operația de rulare reprezintă crearea propriu-zisă a spațiului izolat în sistemul de operare. Pentru realizarea acestei operații, se efectuează mai mulți pași.
             \begin{lstlisting}[language=Rust, style=boxed, caption={Rularea unui container},captionpos=b]
 fn run(&self, daemon: bool, volume: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
     self.mount_container_filesystem()?;
@@ -219,23 +222,51 @@ fn run(&self, daemon: bool, volume: Option<String>) -> Result<(), Box<dyn std::e
     Ok(())
 }           \end{lstlisting}
             \label{fig:cod_crun}
-            \paragraph{} Operația de rulare reprezintă crearea propriu-zisă a spațiului izolat în sistemul de operare. Pentru realizarea acestei operații, se efectuează mai mulți pași.
-            \paragraph{Efectuarea primului \textit{fork},} care are rolul de a separa procesul containerului de procesul \textit{daemonului} atunci cănd programul trebuie sa ruleze pe fundal și de a îl păstra pe acesta în \textit{namespaceul} inițial al sistemului de operare gazdă. De asemenea, este creat fișierul \textit{pid} care este folosit pentru a verifica daca container-ul rulează deja și, în cazul afirmativ, care este PID-ul acestuia. Crearea fișierului este efectuată de către părintele din \textit{fork}, resul pașilor de către copil.
-                \begin{figure}[h!]
-                    \centering
-                    \includegraphics[width=.75\textwidth]{fork}
-                    \caption{Crearea procesului în noul namespace}
-                    \label{fig:fork}
-                \end{figure}
-            \paragraph{Montarea rădacinii containerului,} folosind sistemul de fișiere OverlayFS. În urma acesteia, în directorul \textit{merged} se va găsi structura de directoare specifică \textit{kernelului} Linux.
-            \paragraph{Apelul funcției \textit{unshare}} cu \textit{flag}-urile specifice fiecarui \textit{namespace}. În urma acestuia, toate procesele copil ale procesului curent vor fi create în \textit{namespace}-uri separate.
-            \paragraph{Setarea sistemului de fișiere a mașinii gazdă ca privat.} Acest pas are rolul de a izola toate evenimentele din sistemul de operare gazdă care au legătură cu operația de montare.
-            \paragraph{Legarea executabilului folosit ca proces inițial.} Acest pas constă în efectuarea unui \textit{bind mount} între fișierul \textit{tini}, aflat în directorul \textit{.minato}, și un fișier nou creat în sistemul de fișiere al containerului. \textit{tini} este un program open-source care are aceleași funcționalitați ca procesul \textit{init} găsit în sistemele de operare Unix.
-            \paragraph{Crearea directoarelor} \textit{dev}, \textit{sys}, \textit{proc}, \textit{old\_proc} și \textit{put\_old}. Directorul \textit{old\_proc} este folosit pentru montarea pseudo-sistemului de fișiere \textit{proc}, iar directorul \textit{put\_old} este folosit în operația de \textit{pivot\_root}, similară cu \textit{chroot}, prin care se schimbă rădacina procesului curent.
-            \paragraph{Crearea legăturii de rețea} dintre container și sistemul de operare gazdă folosind un dispozitiv virtual de \textit{ethernet}(\textit{veth}).
-
             \begin{figure}[h!]
-                \begin{lstlisting}[language=bash, style=boxed]
+                \centering
+                \includegraphics[width=.75\textwidth]{fork}
+                \caption{Crearea procesului în noul namespace}
+                \label{fig:fork}
+            \end{figure}
+            \paragraph{Efectuarea primului \textit{fork},} care are rolul de a separa procesul containerului de procesul \textit{daemonului} atunci cănd programul trebuie sa ruleze pe fundal și de a îl păstra pe acesta în \textit{namespaceul} inițial al sistemului de operare gazdă. De asemenea, este creat fișierul \textit{pid} care este folosit pentru a verifica daca container-ul rulează deja și, în cazul afirmativ, care este PID-ul acestuia. Crearea fișierului este efectuată de către părintele din \textit{fork}, resul pașilor de către copil.
+            \paragraph{Montarea rădăcinii containerului,} cu sistemul de fișiere OverlayFS folosind comanda \textbf{mount -t overlay overlay -olowerdir=/lower,upperdir=/upper,\\workdir=/work /merged}. În urma acesteia, în directorul \textit{merged} se va găsi structura de directoare specifică \textit{kernelului} Linux.
+            \begin{lstlisting}[language=Rust, style=boxed, caption={Montarea directorului în care este sistemul de fișiere al containerului},captionpos=b]
+fn mount_container_filesystem(&self) -> Result<(), Box<dyn std::error::Error>> {
+    info!("mounting container filesystem...");
+
+    let container_path = Path::new(&self.path);
+    let subdirectories = container_path.join("lower")
+        .read_dir().unwrap()
+        .map(|dir|
+            format!("{}", dir.unwrap().path().display()))
+        .collect::<Vec<String>>()
+        .join(":");
+    let lowerdir_arg  = format!("lowerdir={}",       subdirectories);
+    let upperdir_arg  = format!("upperdir={}/upper", &self.path);
+    let workdir_arg   = format!("workdir={}/work",   &self.path);
+    let mergeddir_arg = format!("{}/merged",         &self.path);
+    let full_arg = format!("{},{},{}",
+        lowerdir_arg, upperdir_arg, workdir_arg
+    );
+
+    mount(
+        Some("overlay"),
+        mergeddir_arg.as_str(),
+        Some("overlay"),
+        MsFlags::empty(),
+        Some(full_arg.as_str())
+    )?;
+
+    info!("mounted container filesystem.");
+    Ok(())
+}           \end{lstlisting}
+            \label{fig:cod_cmount}
+            \paragraph{Apelul funcției \textit{unshare}} cu \textit{flag}-urile specifice fiecarui \textit{namespace}. În urma acestuia, toate procesele copil ale procesului curent vor fi create în \textit{namespace}-uri separate.
+            \paragraph{Setarea sistemului de fișiere al mașinii gazdă ca privat.} Acest pas are rolul de a izola toate evenimentele de montare sau de demontare care au loc în sistemul de operare gazdă.
+            \paragraph{Legarea executabilului folosit ca proces inițial (init).} Acest pas constă în efectuarea unui \textit{bind mount} între fișierul \textit{tini}, aflat în directorul \textit{.minato}, și un fișier nou creat în sistemul de fișiere al containerului. \textit{tini} este un program open-source care are aceleași funcționalitați ca procesul \textit{init} găsit în sistemele de operare Unix, de exemplu, protecția împotriva creării proceselor \textit{zombie}.
+            \paragraph{Crearea directoarelor} \textit{dev}, \textit{sys}, \textit{proc}, \textit{old\_proc} și \textit{put\_old}. Directoarele \textit{dev}, \textit{sys} și \textit{proc} conțin sisteme de fișiere specifice sistemelor de operare Unix, necesare pentru funcționarea containerului. Directorul \textit{old\_proc} este folosit pentru montarea pseudo-sistemului de fișiere \textit{proc}, iar directorul \textit{put\_old} este folosit în operația de schimbare a rădăcinii procesului curent, \textit{pivot\_root}.
+            \paragraph{Crearea legăturii de rețea} dintre container și sistemul de operare gazdă folosind un dispozitive virtuale de \textit{ethernet}(\textit{veth}) și un \textit{bridge}. În executarea acestei operații se foloseste aplicația \textbf{iproute2} din kernelul Linux.
+            \begin{lstlisting}[language=bash, style=boxed, caption={Comenzile utilizate pentru crearea legăturii de rețea},captionpos=b]
 ip link add example-br0 type bridge
 ip link set dev example-br0 up
 ip link add example-veth0 type veth peer name example-veth1
@@ -248,12 +279,88 @@ ip netns exec example-ns ip link set lo up
 ip netns exec example-ns ip link set example-veth1 up
 ip netns exec example-ns ip addr add 192.168.1.11/24 dev example-veth1
 ip netns exec example-ns ip route add default via 192.168.1.11/24 \end{lstlisting}
-                \caption{Comenzile utilizate pentru crearea legăturii de rețea}
                 \label{fig:cod_net}
-            \end{figure}
-            \paragraph{Crearea ierarhiei cgroup.} Pentru efectuarea acestui pas este nevoie doar de crearea și montarea directoarelor principale ( \textit{freezer}, \textit{memory}, \textit{blkio}, etc.). Odata montate, acestea sunt populate automat de către \textit{kernel}.
-            \paragraph{Schimbarea id-urilor utilizatorului} pentru noul \textit{user namespace}, folosind fișierele \textit{/proc/self/uid\_map} și \textit{/proc/self/gid\_map}. Acestea permit crearea unei legături unu la unu între id-urile din sistemul de operare gazdă si id-urile din container.
-            \paragraph{Schimbarea rădacinii sistemului de fișiere} din container folosind operația \textit{pivot\_root}.
+            \paragraph{Montarea directoarelor \textit{dev} și \textit{proc}, și a ierarhiei cgroup.} Directorul \textit{dev} va fi legat cu cel din sistemul gazdă pentru a avea acces la dispozitivele acesteia, iar directorul \textit{proc} va fi de asemenea legat cu cel din sistemul gazdă, dar doar temporar. Pentru crearea ierarhiei cgroup este nevoie doar de crearea și montarea directoarelor principale ( \textit{freezer}, \textit{memory}, \textit{blkio}, etc.) ale acesteia. Odata montate, acestea sunt populate automat de către \textit{kernel}.
+            \begin{lstlisting}[language=Rust, style=boxed, caption={Montarea directoarelor \textit{dev} și \textit{proc}, și a ierarhiei cgroup},captionpos=b]
+fn mount_container_directories(&self) -> Result<(), Box<dyn std::error::Error>> {
+    info!("mounting container directories...");
+
+    info!("mounting proc to old_proc...");
+    mount(
+        Some("/proc"),
+        "old_proc",
+        None::<&str>,
+        MsFlags::MS_BIND | MsFlags::MS_REC,
+        None::<&str>,
+    )?;
+
+    self.mount_container_cgroup_hierarchy()?;
+
+    info!("mounting dev to dev...");
+    mount(
+        Some("/dev"),
+        "dev",
+        None::<&str>,
+        MsFlags::MS_BIND | MsFlags::MS_REC,
+        None::<&str>,
+    )?;
+
+    info!("mounted container directories.");
+    Ok(())
+}
+
+fn mount_container_cgroup_hierarchy(&self) -> Result<(), Box<dyn std::error::Error>> {
+    info!("mounting container cgroup hierarchy...");
+
+    let directories = vec![
+        "freezer", "hugetlb", "memory", "blkio", "cpuset",
+        "cpu,cpuacct", "devices", "pids",
+        "net_cls,net_prio", "perf_event", "rdma"
+    ];
+
+    for dir in directories {
+        let dir_path = format!("sys/fs/cgroup/{}", dir);
+        if Path::new(&dir_path).exists() {
+            fs::remove_dir_all(&dir_path)?;
+        }
+        fs::create_dir_all(&dir_path)?;
+
+        info!("mounting cgroup {}...", dir);
+        let cgroup_version = "cgroup";
+        mount(
+            Some(cgroup_version),
+            dir_path.as_str(),
+            Some(cgroup_version),
+            MsFlags::MS_NOSUID | MsFlags::MS_NODEV | MsFlags::MS_NOEXEC,
+            Some(dir),
+        )?;
+    }
+
+    info!("mounted container cgroup hierarchy.");
+    Ok(())
+}           \end{lstlisting}
+            \label{fig:cod_mount2}
+            \paragraph{Schimbarea id-urilor utilizatorului} pentru noul \textit{user namespace}, folosind fișierele \textit{/proc/self/uid\_map} și \textit{/proc/self/gid\_map}. Acestea permit crearea unei legături unu la unu între id-urile din sistemul de operare gazdă si id-urile din container. După crearea unui \textit{user namespace} nou, fișierul \textit{uid\_map} al containerului poate fi scris o singură dată pentru a defini maparea ID-urilor utilizatorului în noul spațiu de utilizator. Încercarea de a scrie de mai multe ori într-un fișier \textit{uid\_map} dintr-un \textit{user namespace} eșuează cu eroarea EPERM. Reguli similare se aplică pentru fișierul \textit{gid\_map}. \cite{ns:user}
+            \paragraph{Schimbarea rădăcinii sistemului de fișiere} din container folosind operația \textit{pivot\_root}. Directorul \textit{put\_old} este un director aflat în rădacina containerului, necesar pentru această operația. Odata folosit, el este demontat si șters.
+            \begin{lstlisting}[language=Rust, style=boxed, caption={Schimbarea rădăcinii sistemului de fișiere},captionpos=b]
+fn pivot_container_root(&self) -> Result<(), Box<dyn std::error::Error>> {
+    info!("pivoting container root..");
+
+    info!("pivoting root...");
+    pivot_root(".", "put_old")?;
+
+    info!("unmounting pivot auxiliary folder...");
+    umount2("/put_old", MntFlags::MNT_DETACH)?;
+    if Path::new("/put_old").exists() {
+        info!("removing auxiliary folder...");
+        std::fs::remove_dir_all("/put_old")?;
+    }
+
+    info!("pivoted container root.");
+    Ok(())
+    }           \end{lstlisting}
+                \label{fig:cod_mount2}
+
             \paragraph{Efectuarea \textit{fork}-ului final} pentru aplicarea efectelor operației \textit{unshare}. Acesta va crea un nou proces copil, în care se va executa primul proces al containerului folosind comanda \textit{execve}.
             \paragraph{Curățarea spațiului de lucru} urmată de sfârșirea procesului început de către container. Aceasta constă în ștergerea dispozitivelor create pentru stabilirea legăturii de rețea dintre container și sistem de operare, și în demontarea sistemului de fișiere \textit{overlay}.
 
@@ -264,10 +371,10 @@ ip netns exec example-ns ip route add default via 192.168.1.11/24 \end{lstlistin
                 \label{fig:run}
             \end{figure}
 
+        \pagebreak
         \subsection{Deschiderea unui container (\textit{open})}
             \paragraph{} Operația de deschidere a unui container se realizează folosind apelul de system \textit{setns} împreuna cu \textit{flag}-urile specifice fiecarui \textit{namespace}, urmat de comanda \textit{execve} cu interpretorul \textit{sh}.
-            \begin{figure}[h!]
-                \begin{lstlisting}[language=Rust, style=boxed, caption={Crearea unui container},captionpos=b]
+                \begin{lstlisting}[language=Rust, style=boxed, caption={Deschiderea unui container},captionpos=b]
 pub fn open(&self, container_name: &str) -> Result<(), Box<dyn std::error::Error>> {
     info!("opening container...");
 
@@ -309,9 +416,7 @@ pub fn open(&self, container_name: &str) -> Result<(), Box<dyn std::error::Error
     info!("opened container.");
     result
 }                \end{lstlisting}
-                \caption{Crearea unui container}
                 \label{fig:cod_ccreate}
-            \end{figure}
 
         \subsection{Oprirea unui container (\textit{stop})}
             \paragraph{} Operația de oprire a unui container se realizează folosind apelul de system \textit{kill} împreuna cu \textit{flag}-ul \textit{SIGTERM} și id-ul PID al container-ului.
